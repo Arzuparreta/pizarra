@@ -12,22 +12,16 @@ const app = express();
 const PORT = 3000;
 const HOST = '0.0.0.0';
 
-// Ensure board directory exists and clear any leftover assets from previous runs.
-// The board does not persist unless the user explicitly saves (export) and later opens (import) that file.
 const boardDir = path.join(__dirname, 'board');
 fs.mkdirSync(boardDir, { recursive: true });
 
 function clearBoardDir() {
   try {
-    const names = fs.readdirSync(boardDir);
-    for (const name of names) {
+    for (const name of fs.readdirSync(boardDir)) {
       if (name === '.gitkeep') continue;
-      const p = path.join(boardDir, name);
       try {
-        fs.unlinkSync(p);
-      } catch {
-        // ignore
-      }
+        fs.unlinkSync(path.join(boardDir, name));
+      } catch (_) {}
     }
   } catch (err) {
     console.error('Failed to clear board directory:', err);
@@ -40,7 +34,6 @@ function ext(name) {
   return path.extname(name) || '';
 }
 
-// Multer: save uploads to board, preserve extension
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, boardDir),
   filename: (_req, file, cb) => {
@@ -49,7 +42,6 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Multer: import .pizarra files into memory
 const importUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -57,7 +49,6 @@ const importUpload = multer({
   },
 });
 
-// In-memory board state: { id, type, url, textContent, x, y }[]
 let boardState = [];
 
 function isImage(mimetype) {

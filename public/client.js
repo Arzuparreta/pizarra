@@ -10,7 +10,7 @@ const trashEl = document.getElementById('trash');
 let boardState = [];
 
 function updateEmptyHint() {
-  if (emptyHintEl) emptyHintEl.hidden = boardState.length > 0;
+  emptyHintEl.hidden = boardState.length > 0;
 }
 
 function renderBoard(state) {
@@ -65,16 +65,14 @@ function makeDraggable(el) {
     const onUp = (e) => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      if (trashEl) {
-        const rect = trashEl.getBoundingClientRect();
-        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-          const id = el.dataset.id;
-          fetch('/board/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id }),
-          }).catch((err) => console.error('Delete failed', err));
-        }
+      const rect = trashEl.getBoundingClientRect();
+      if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        const id = el.dataset.id;
+        fetch('/board/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id }),
+        }).catch((err) => console.error('Delete failed', err));
       }
     };
     document.addEventListener('mousemove', onMove);
@@ -82,48 +80,27 @@ function makeDraggable(el) {
   });
 }
 
-if (saveBtn) {
-  saveBtn.addEventListener('click', () => {
-    window.location.href = '/board/export';
-  });
-}
+saveBtn.addEventListener('click', () => {
+  window.location.href = '/board/export';
+});
 
-if (openBtn && openInput) {
-  openBtn.addEventListener('click', () => {
-    openInput.click();
-  });
+openBtn.addEventListener('click', () => {
+  openInput.click();
+});
 
-  openInput.addEventListener('change', () => {
-    const file = openInput.files && openInput.files[0];
-    if (!file) return;
-    const form = new FormData();
-    form.append('board', file);
-    fetch('/board/import', { method: 'POST', body: form })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.success) {
-          console.error('Import failed', data);
-        }
-      })
-      .catch((err) => {
-        console.error('Import failed', err);
-      })
-      .finally(() => {
-        openInput.value = '';
-      });
-  });
-}
+openInput.addEventListener('change', () => {
+  const file = openInput.files && openInput.files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append('board', file);
+  fetch('/board/import', { method: 'POST', body: form })
+    .catch((err) => console.error('Import failed', err))
+    .finally(() => { openInput.value = ''; });
+});
 
-if (wipeBtn) {
-  wipeBtn.addEventListener('click', () => {
-    fetch('/board/wipe', { method: 'POST' })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.success) console.error('Wipe failed', data);
-      })
-      .catch((err) => console.error('Wipe failed', err));
-  });
-}
+wipeBtn.addEventListener('click', () => {
+  fetch('/board/wipe', { method: 'POST' }).catch((err) => console.error('Wipe failed', err));
+});
 
 boardEl.addEventListener('dragover', (e) => {
   e.preventDefault();
@@ -136,17 +113,12 @@ boardEl.addEventListener('drop', (e) => {
   const y = e.clientY - boardEl.getBoundingClientRect().top;
   const files = e.dataTransfer.files;
   if (!files.length) return;
-  Array.from(files).forEach((file) => {
+  files.forEach((file) => {
     const form = new FormData();
     form.append('file', file);
     form.append('x', String(Math.max(0, Math.round(x))));
     form.append('y', String(Math.max(0, Math.round(y))));
-    fetch('/upload', { method: 'POST', body: form })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.success) console.error('Upload failed', data);
-      })
-      .catch((err) => console.error('Upload failed', err));
+    fetch('/upload', { method: 'POST', body: form }).catch((err) => console.error('Upload failed', err));
   });
 });
 
