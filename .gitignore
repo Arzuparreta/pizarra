@@ -1,2 +1,4 @@
 board/*
 !board/.gitkeep
+
+.cursor

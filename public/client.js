@@ -5,6 +5,7 @@ const saveBtn = document.getElementById('save-board');
 const openBtn = document.getElementById('open-board');
 const openInput = document.getElementById('open-board-input');
 const wipeBtn = document.getElementById('wipe-btn');
+const trashEl = document.getElementById('trash');
 
 let boardState = [];
 
@@ -61,12 +62,23 @@ function makeDraggable(el) {
       startX = e2.clientX;
       startY = e2.clientY;
     };
-    const onUp = () => {
+    const onUp = (e) => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      if (trashEl) {
+        const rect = trashEl.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          const id = el.dataset.id;
+          fetch('/board/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+          }).catch((err) => console.error('Delete failed', err));
+        }
+      }
     };
     document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    document.addEventListener('mouseup', (e) => onUp(e));
   });
 }
 
@@ -165,4 +177,11 @@ socket.on('item_moved', (data) => {
 socket.on('board_replaced', (state) => {
   boardState = state;
   renderBoard(boardState);
+});
+
+socket.on('item_removed', (data) => {
+  boardState = boardState.filter((i) => i.id !== data.id);
+  const el = boardEl.querySelector(`[data-id="${data.id}"]`);
+  if (el) el.remove();
+  updateEmptyHint();
 });

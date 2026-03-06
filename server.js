@@ -238,6 +238,31 @@ app.post('/board/wipe', (_req, res) => {
   return res.json({ success: true });
 });
 
+app.post('/board/delete', (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res.status(400).json({ error: 'Missing id' });
+  }
+  const item = boardState.find((i) => i.id === id);
+  if (!item) {
+    return res.status(400).json({ error: 'Item not found' });
+  }
+  if (item.type === 'image' && item.url) {
+    const basename = path.basename(item.url);
+    const filePath = path.join(boardDir, basename);
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (err) {
+      console.error('Failed to delete asset file:', err);
+    }
+  }
+  boardState = boardState.filter((i) => i.id !== id);
+  io.emit('item_removed', { id });
+  return res.json({ success: true });
+});
+
 const httpServer = app.listen(PORT, HOST, () => {
   console.log(`Pizarra server at http://${HOST}:${PORT}`);
 });
