@@ -208,7 +208,6 @@ function openBoard(name) {
       boardState = state.items || [];
       renderBoard(boardState);
       socket.emit('join_board', { name });
-      loadBoardList();
     })
     .catch((err) => console.error('Failed to open board', err));
 }
