@@ -95,7 +95,6 @@ function createBoardRow(name) {
   nameEl.className = 'board-card-name';
   nameEl.textContent = name;
   nameEl.addEventListener('click', (e) => { e.stopPropagation(); openBoard(name); });
-  nameEl.addEventListener('dblclick', (e) => { e.stopPropagation(); startRename(card, name); });
   const actions = document.createElement('div');
   actions.className = 'board-card-actions';
   const renameBtn = document.createElement('button');
@@ -135,7 +134,6 @@ function startRename(card, name) {
     span.className = 'board-card-name';
     span.textContent = name;
     span.addEventListener('click', (e) => { e.stopPropagation(); openBoard(name); });
-    span.addEventListener('dblclick', (e) => { e.stopPropagation(); startRename(card, name); });
     card.insertBefore(span, card.querySelector('.board-card-actions'));
     if (!newName || newName === name) return;
     fetch(`/api/board/${encodeURIComponent(name)}`, {
