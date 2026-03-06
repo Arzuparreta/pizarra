@@ -109,17 +109,14 @@ boardEl.addEventListener('dragover', (e) => {
 
 boardEl.addEventListener('drop', (e) => {
   e.preventDefault();
-  const x = e.clientX - boardEl.getBoundingClientRect().left;
-  const y = e.clientY - boardEl.getBoundingClientRect().top;
-  const files = e.dataTransfer.files;
-  if (!files.length) return;
-  files.forEach((file) => {
-    const form = new FormData();
-    form.append('file', file);
-    form.append('x', String(Math.max(0, Math.round(x))));
-    form.append('y', String(Math.max(0, Math.round(y))));
-    fetch('/upload', { method: 'POST', body: form }).catch((err) => console.error('Upload failed', err));
-  });
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const rect = boardEl.getBoundingClientRect();
+  const form = new FormData();
+  form.append('file', file);
+  form.append('x', String(Math.max(0, Math.round(e.clientX - rect.left))));
+  form.append('y', String(Math.max(0, Math.round(e.clientY - rect.top))));
+  fetch('/upload', { method: 'POST', body: form }).catch((err) => console.error('Upload failed', err));
 });
 
 socket.on('init_state', (state) => {
