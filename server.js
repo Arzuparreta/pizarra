@@ -5,51 +5,57 @@ const express = require('express');
 const multer = require('multer');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const archiver = require('archiver');
-const AdmZip = require('adm-zip');
 
 const app = express();
 const PORT = 3000;
 const HOST = '0.0.0.0';
 
-const boardDir = path.join(__dirname, 'board');
-fs.mkdirSync(boardDir, { recursive: true });
+const boardsDir = path.join(__dirname, 'boards');
+fs.mkdirSync(boardsDir, { recursive: true });
 
-function clearBoardDir() {
+const boardStates = {};
+
+function sanitizeBoardName(name) {
+  if (typeof name !== 'string') return null;
+  const safe = name.replace(/[^a-zA-Z0-9_-]/g, '');
+  return safe.length > 0 ? safe : null;
+}
+
+function getBoardState(name) {
+  const safe = sanitizeBoardName(name);
+  if (!safe) return null;
+  if (boardStates[safe]) return boardStates[safe];
+  const filePath = path.join(boardsDir, `${safe}.json`);
+  if (!fs.existsSync(filePath)) {
+    const initial = { version: 1, items: [] };
+    boardStates[safe] = initial;
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(initial, null, 2), 'utf8');
+    } catch (err) {
+      console.error('Failed to create board file:', err);
+    }
+    return initial;
+  }
   try {
-    for (const name of fs.readdirSync(boardDir)) {
-      if (name === '.gitkeep') continue;
-      try {
-        fs.unlinkSync(path.join(boardDir, name));
-      } catch (_) {}
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (data && typeof data.version === 'number' && Array.isArray(data.items)) {
+      boardStates[safe] = data;
+      return data;
     }
   } catch (err) {
-    console.error('Failed to clear board directory:', err);
+    console.error('Failed to load board:', err);
   }
+  const initial = { version: 1, items: [] };
+  boardStates[safe] = initial;
+  return initial;
 }
 
-clearBoardDir();
-
-function ext(name) {
-  return path.extname(name) || '';
+function saveBoardToFile(name) {
+  const safe = sanitizeBoardName(name);
+  if (!safe || !boardStates[safe]) return;
+  const filePath = path.join(boardsDir, `${safe}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(boardStates[safe], null, 2), 'utf8');
 }
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, boardDir),
-  filename: (_req, file, cb) => {
-    cb(null, `${crypto.randomUUID()}${ext(file.originalname)}`);
-  },
-});
-const upload = multer({ storage });
-
-const importUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB
-  },
-});
-
-let boardState = [];
 
 function isImage(mimetype) {
   return /^image\//.test(mimetype);
@@ -59,199 +65,101 @@ function isText(mimetype, filename) {
   return mimetype === 'text/plain' || /\.(txt|md|json)$/i.test(filename || '');
 }
 
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/board', express.static(boardDir));
 
-function buildManifestFromState(state) {
-  return {
-    version: 1,
-    items: state.map((item) => {
-      const base = {
-        id: item.id,
-        type: item.type,
-        x: item.x,
-        y: item.y,
-      };
-      if (item.type === 'image' && item.url) {
-        return {
-          ...base,
-          asset: `assets/${item.id}${ext(path.basename(item.url))}`,
-        };
-      }
-      return {
-        ...base,
-        textContent: item.textContent != null ? item.textContent : null,
-      };
-    }),
-  };
-}
+app.get('/api/boards', (req, res) => {
+  try {
+    const names = fs.readdirSync(boardsDir)
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => path.basename(f, '.json'));
+    res.json({ names });
+  } catch (err) {
+    console.error('List boards error:', err);
+    res.status(500).json({ error: 'Failed to list boards' });
+  }
+});
 
-app.get('/board/export', (req, res) => {
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', 'attachment; filename="board.pizarra"');
+app.get('/api/board/:name', (req, res) => {
+  const state = getBoardState(req.params.name);
+  if (!state) return res.status(400).json({ error: 'Invalid board name' });
+  res.json(state);
+});
 
-  const archive = archiver('zip', { zlib: { level: 9 } });
-
-  archive.on('error', (err) => {
-    console.error('Export error:', err);
-    if (!res.headersSent) {
-      res.status(500).end();
-    } else {
-      res.end();
-    }
-  });
-
-  archive.pipe(res);
-
-  const manifest = buildManifestFromState(boardState);
-  archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
-
-  boardState.forEach((item) => {
-    if (item.type !== 'image' || !item.url) return;
-    const basename = path.basename(item.url);
-    const srcPath = path.join(boardDir, basename);
-    if (!fs.existsSync(srcPath)) return;
-    archive.file(srcPath, { name: `assets/${item.id}${ext(basename)}` });
-  });
-
-  archive.finalize();
+app.post('/api/board/:name', (req, res) => {
+  const safe = sanitizeBoardName(req.params.name);
+  if (!safe) return res.status(400).json({ error: 'Invalid board name' });
+  const { version, items } = req.body;
+  if (typeof version !== 'number' || !Array.isArray(items)) {
+    return res.status(400).json({ error: 'Invalid body: need version and items' });
+  }
+  boardStates[safe] = { version, items };
+  try {
+    saveBoardToFile(safe);
+  } catch (err) {
+    console.error('Save board error:', err);
+    return res.status(500).json({ error: 'Failed to save board' });
+  }
+  io.to(`board:${safe}`).emit('board_replaced', boardStates[safe]);
+  res.json({ success: true });
 });
 
 app.post('/upload', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  const board = sanitizeBoardName(req.body.board);
+  if (!board) return res.status(400).json({ error: 'Missing or invalid board name' });
+
+  const state = getBoardState(board);
   const x = Number(req.body.x) || 0;
   const y = Number(req.body.y) || 0;
-  const relativeUrl = `/board/${req.file.filename}`;
   const id = crypto.randomUUID();
   const mimetype = req.file.mimetype || '';
   const filename = req.file.originalname || '';
 
   const type = isImage(mimetype) ? 'image' : 'text';
-  let textContent = null;
-  if (type === 'text' && isText(mimetype, filename)) {
-    try {
-      textContent = fs.readFileSync(req.file.path, 'utf8');
-    } catch (_) {
-      textContent = '';
+  let item;
+
+  if (type === 'image') {
+    const base64 = req.file.buffer.toString('base64');
+    const dataUrl = `data:${mimetype};base64,${base64}`;
+    item = { id, type, x, y, dataUrl };
+  } else {
+    let textContent = null;
+    if (isText(mimetype, filename)) {
+      try {
+        textContent = req.file.buffer.toString('utf8');
+      } catch (_) {
+        textContent = '';
+      }
     }
+    item = { id, type, x, y, textContent };
   }
 
-  const item = { id, type, url: relativeUrl, textContent, x, y };
-  boardState.push(item);
-  io.emit('item_added', item);
+  state.items.push(item);
+  io.to(`board:${board}`).emit('item_added', item);
   res.json({ success: true, item });
 });
 
-app.post('/board/import', importUpload.single('board'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No board file uploaded' });
-  }
-
-  let zip;
-  try {
-    zip = new AdmZip(req.file.buffer);
-  } catch (err) {
-    console.error('Import error (zip):', err);
-    return res.status(400).json({ error: 'Invalid board file' });
-  }
-
-  const manifestEntry = zip.getEntry('manifest.json');
-  if (!manifestEntry) {
-    return res.status(400).json({ error: 'Board file is missing manifest.json' });
-  }
-
-  let manifest;
-  try {
-    manifest = JSON.parse(manifestEntry.getData().toString('utf8'));
-  } catch (err) {
-    console.error('Import error (manifest JSON):', err);
-    return res.status(400).json({ error: 'Invalid manifest in board file' });
-  }
-
-  if (!manifest || manifest.version !== 1 || !Array.isArray(manifest.items)) {
-    return res.status(400).json({ error: 'Unsupported or invalid board manifest' });
-  }
-
-  clearBoardDir();
-
-  const newState = [];
-
-  for (const item of manifest.items) {
-    const type = item.type;
-    const x = Number(item.x) || 0;
-    const y = Number(item.y) || 0;
-
-    if (type === 'image' && item.asset) {
-      const entry = zip.getEntry(item.asset);
-      if (!entry) continue;
-      const filename = `${crypto.randomUUID()}${ext(item.asset)}`;
-      const destPath = path.join(boardDir, filename);
-      try {
-        fs.writeFileSync(destPath, entry.getData());
-      } catch (err) {
-        console.error('Failed to write asset file:', err);
-        continue;
-      }
-      newState.push({
-        id: crypto.randomUUID(),
-        type: 'image',
-        url: `/board/${filename}`,
-        textContent: null,
-        x,
-        y,
-      });
-    } else if (type === 'text') {
-      newState.push({
-        id: crypto.randomUUID(),
-        type: 'text',
-        url: null,
-        textContent: item.textContent != null ? item.textContent : null,
-        x,
-        y,
-      });
-    }
-  }
-
-  boardState = newState;
-  io.emit('board_replaced', boardState);
-
-  return res.json({ success: true, count: boardState.length });
-});
-
-app.post('/board/wipe', (_req, res) => {
-  boardState = [];
-  clearBoardDir();
-  io.emit('board_replaced', boardState);
-  return res.json({ success: true });
-});
-
-app.post('/board/delete', (req, res) => {
+app.post('/api/board/:name/delete', (req, res) => {
+  const safe = sanitizeBoardName(req.params.name);
+  if (!safe) return res.status(400).json({ error: 'Invalid board name' });
   const { id } = req.body;
-  if (!id) {
-    return res.status(400).json({ error: 'Missing id' });
-  }
-  const item = boardState.find((i) => i.id === id);
-  if (!item) {
-    return res.status(400).json({ error: 'Item not found' });
-  }
-  if (item.type === 'image' && item.url) {
-    const basename = path.basename(item.url);
-    const filePath = path.join(boardDir, basename);
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch (err) {
-      console.error('Failed to delete asset file:', err);
-    }
-  }
-  boardState = boardState.filter((i) => i.id !== id);
-  io.emit('item_removed', { id });
-  return res.json({ success: true });
+  if (!id) return res.status(400).json({ error: 'Missing id' });
+
+  const state = boardStates[safe];
+  if (!state) return res.status(404).json({ error: 'Board not found' });
+  const idx = state.items.findIndex((i) => i.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Item not found' });
+
+  state.items.splice(idx, 1);
+  io.to(`board:${safe}`).emit('item_removed', { id });
+  res.json({ success: true });
 });
 
 const httpServer = app.listen(PORT, HOST, () => {
@@ -261,15 +169,26 @@ const httpServer = app.listen(PORT, HOST, () => {
 const io = new Server(httpServer);
 
 io.on('connection', (socket) => {
-  socket.emit('init_state', boardState);
+  socket.on('join_board', (data) => {
+    const name = sanitizeBoardName(data && data.name);
+    if (!name) return;
+    getBoardState(name);
+    socket.join(`board:${name}`);
+    socket.currentBoard = name;
+    socket.emit('init_state', boardStates[name]);
+  });
 
   socket.on('move_item', (data) => {
+    const name = socket.currentBoard;
+    if (!name) return;
+    const state = boardStates[name];
+    if (!state) return;
     const { id, x, y } = data;
-    const item = boardState.find((i) => i.id === id);
+    const item = state.items.find((i) => i.id === id);
     if (item) {
       item.x = x;
       item.y = y;
-      socket.broadcast.emit('item_moved', { id, x, y });
+      socket.to(`board:${name}`).emit('item_moved', { id, x, y });
     }
   });
 });

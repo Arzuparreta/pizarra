@@ -6,11 +6,101 @@
   <title>Pizarra</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; overflow: hidden; background: #e8e8e8; }
-    #board {
-      position: relative;
-      width: 100%;
+    html, body { height: 100%; overflow: hidden; background: #e8e8e8; font: 14px/1.4 sans-serif; }
+    #app {
+      display: flex;
       height: 100%;
+    }
+    #sidebar {
+      position: relative;
+      z-index: 1;
+      width: 180px;
+      padding: 12px;
+      background: #ddd;
+      border-right: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #sidebar h2 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    #board-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+    }
+    .board-card {
+      padding: 8px 10px;
+      text-align: left;
+      border-radius: 4px;
+      border: 1px solid #bbb;
+      background: #f7f7f7;
+      cursor: pointer;
+      font: 14px/1.3 sans-serif;
+    }
+    .board-card:hover { background: #eee; }
+    #new-board-row {
+      display: flex;
+      gap: 4px;
+    }
+    #new-board-name {
+      flex: 1;
+      padding: 6px 8px;
+      border: 1px solid #bbb;
+      border-radius: 4px;
+      font: 14px/1.3 sans-serif;
+    }
+    #new-board-btn {
+      padding: 6px 10px;
+      border-radius: 4px;
+      border: 1px solid #bbb;
+      background: #f7f7f7;
+      cursor: pointer;
+      font: 14px/1.3 sans-serif;
+    }
+    #new-board-btn:hover { background: #eee; }
+    #main {
+      flex: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    #toolbar {
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #e0e0e0;
+      border-bottom: 1px solid #ccc;
+    }
+    .btn {
+      border-radius: 4px;
+      border: 1px solid #bbb;
+      background: #f7f7f7;
+      cursor: pointer;
+      padding: 6px 10px;
+      font: 14px/1.4 sans-serif;
+    }
+    .btn:hover { background: #eee; }
+    #save-msg {
+      color: #363;
+      font-size: 13px;
+    }
+    #board {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    #canvas {
+      position: absolute;
+      inset: 0;
     }
     #empty-hint {
       position: absolute;
@@ -22,31 +112,9 @@
       text-align: center;
       pointer-events: none;
     }
-    .btn {
-      border-radius: 4px;
-      border: 1px solid #bbb;
-      background: #f7f7f7;
-      cursor: pointer;
-      font: 14px/1.4 sans-serif;
-    }
-    .btn:hover { background: #eee; }
-    #save-board {
+    #wipe-btn {
       position: absolute;
-      top: 12px;
-      left: 12px;
-      z-index: 10;
-      padding: 6px 10px;
-    }
-    #open-board {
-      position: absolute;
-      top: 12px;
-      left: 115px;
-      z-index: 10;
-      padding: 6px 10px;
-    }
-    #trash {
-      position: absolute;
-      bottom: 56px;
+      bottom: 12px;
       right: 12px;
       z-index: 10;
       width: 40px;
@@ -55,24 +123,29 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      cursor: default;
-    }
-    #wipe-btn {
-      position: absolute;
-      bottom: 12px;
-      right: 12px;
-      z-index: 10;
-      padding: 6px 12px;
       border-radius: 4px;
-      border: 1px solid #b00;
-      background: #c00;
-      color: #fff;
-      font: 14px/1.4 sans-serif;
+      border: 1px solid #a00;
+      background: #f7f7f7;
       cursor: pointer;
     }
-    #wipe-btn:hover {
-      background: #a00;
+    #wipe-btn:hover { background: #ffe0e0; }
+    #trash {
+      position: absolute;
+      bottom: 12px;
+      right: 56px;
+      z-index: 10;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: default;
+      border-radius: 4px;
+      border: 1px solid #bbb;
+      background: #f7f7f7;
     }
+    #trash:hover { background: #eee; }
     .board-item {
       position: absolute;
       cursor: move;
@@ -98,20 +171,40 @@
   </style>
 </head>
 <body>
-  <div id="board">
-    <button id="save-board" class="btn">Save board</button>
-    <button id="open-board" class="btn">Open board</button>
-    <input id="open-board-input" type="file" accept=".pizarra" style="display: none;">
-    <p id="empty-hint">Pizarra<br><small>Drop images or text files here</small></p>
-    <div id="trash" class="btn" title="Drag items here to delete" aria-label="Trash">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="3 6 5 6 21 6"></polyline>
-        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-        <line x1="10" y1="11" x2="10" y2="17"></line>
-        <line x1="14" y1="11" x2="14" y2="17"></line>
-      </svg>
-    </div>
-    <button id="wipe-btn" type="button">Wipe</button>
+  <div id="app">
+    <aside id="sidebar">
+      <h2>Boards</h2>
+      <div id="board-list"></div>
+      <div id="new-board-row">
+        <input type="text" id="new-board-name" placeholder="New board name" />
+        <button type="button" id="new-board-btn" class="btn">New</button>
+      </div>
+    </aside>
+    <main id="main">
+      <div id="toolbar">
+        <button type="button" id="save-board" class="btn">Save</button>
+        <span id="save-msg" hidden></span>
+      </div>
+      <div id="board">
+        <div id="canvas">
+          <p id="empty-hint">Open a board or create one, then drop images or text here</p>
+        </div>
+        <div id="trash" class="btn" title="Drag items here to delete" aria-label="Trash">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </div>
+        <button type="button" id="wipe-btn" class="btn" title="Wipe board" aria-label="Wipe board">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </main>
   </div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
