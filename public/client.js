@@ -2,7 +2,6 @@ const socket = io();
 const boardEl = document.getElementById('board');
 const canvasEl = document.getElementById('canvas');
 const emptyHintEl = document.getElementById('empty-hint');
-const saveBtn = document.getElementById('save-board');
 const boardListEl = document.getElementById('board-list');
 const trashEl = document.getElementById('trash');
 
@@ -250,26 +249,6 @@ socket.on('item_removed', (data) => {
 socket.on('board_replaced', (state) => {
   boardState = state && state.items ? state.items : [];
   renderBoard(boardState);
-});
-
-saveBtn.addEventListener('click', () => {
-  if (!currentBoardName) return;
-  fetch(`/api/board/${encodeURIComponent(currentBoardName)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ version: 1, items: boardState }),
-  })
-    .then((r) => r.json())
-    .then(() => {
-      const msg = document.getElementById('save-msg');
-      if (msg) {
-        msg.textContent = 'Saved';
-        msg.hidden = false;
-        setTimeout(() => { msg.hidden = true; }, 1500);
-      }
-      loadBoardList();
-    })
-    .catch((err) => console.error('Save failed', err));
 });
 
 const wipeBtn = document.getElementById('wipe-btn');

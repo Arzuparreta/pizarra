@@ -14,6 +14,8 @@ const boardsDir = path.join(__dirname, 'boards');
 fs.mkdirSync(boardsDir, { recursive: true });
 
 const boardStates = {};
+const saveDebounce = {};
+const SAVE_DEBOUNCE_MS = 400;
 
 function sanitizeBoardName(name) {
   if (typeof name !== 'string') return null;
@@ -142,6 +144,7 @@ app.post('/upload', upload.single('file'), (req, res) => {
   }
 
   state.items.push(item);
+  saveBoardToFile(board);
   io.to(`board:${board}`).emit('item_added', item);
   res.json({ success: true, item });
 });
@@ -158,6 +161,7 @@ app.post('/api/board/:name/delete', (req, res) => {
   if (idx === -1) return res.status(404).json({ error: 'Item not found' });
 
   state.items.splice(idx, 1);
+  saveBoardToFile(safe);
   io.to(`board:${safe}`).emit('item_removed', { id });
   res.json({ success: true });
 });
@@ -230,6 +234,11 @@ io.on('connection', (socket) => {
       item.x = x;
       item.y = y;
       socket.to(`board:${name}`).emit('item_moved', { id, x, y });
+      if (saveDebounce[name]) clearTimeout(saveDebounce[name]);
+      saveDebounce[name] = setTimeout(() => {
+        delete saveDebounce[name];
+        saveBoardToFile(name);
+      }, SAVE_DEBOUNCE_MS);
     }
   });
 });
