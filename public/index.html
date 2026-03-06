@@ -42,17 +42,11 @@
     #toolbar button:hover {
       background: #eee;
     }
-    #board-actions {
+    #trash {
       position: absolute;
-      bottom: 12px;
+      bottom: 56px;
       right: 12px;
       z-index: 10;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      align-items: flex-end;
-    }
-    #trash {
       width: 40px;
       height: 40px;
       display: flex;
@@ -67,6 +61,10 @@
       background: #eee;
     }
     #wipe-btn {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      z-index: 10;
       padding: 6px 12px;
       border-radius: 4px;
       border: 1px solid #b00;
@@ -110,17 +108,15 @@
       <input id="open-board-input" type="file" accept=".pizarra" style="display: none;">
     </div>
     <p id="empty-hint">Pizarra<br><small>Drop images or text files here</small></p>
-    <div id="board-actions">
-      <div id="trash" title="Drag items here to delete" aria-label="Trash">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="3 6 5 6 21 6"></polyline>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          <line x1="10" y1="11" x2="10" y2="17"></line>
-          <line x1="14" y1="11" x2="14" y2="17"></line>
-        </svg>
-      </div>
-      <button id="wipe-btn" type="button">Wipe</button>
+    <div id="trash" title="Drag items here to delete" aria-label="Trash">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        <line x1="10" y1="11" x2="10" y2="17"></line>
+        <line x1="14" y1="11" x2="14" y2="17"></line>
+      </svg>
     </div>
+    <button id="wipe-btn" type="button">Wipe</button>
   </div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
