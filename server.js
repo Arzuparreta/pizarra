@@ -1,4 +1,3 @@
-const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -37,12 +36,15 @@ function clearBoardDir() {
 
 clearBoardDir();
 
+function ext(name) {
+  return path.extname(name) || '';
+}
+
 // Multer: save uploads to board, preserve extension
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, boardDir),
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || '';
-    cb(null, `${crypto.randomUUID()}${ext}`);
+    cb(null, `${crypto.randomUUID()}${ext(file.originalname)}`);
   },
 });
 const upload = multer({ storage });
@@ -82,11 +84,9 @@ function buildManifestFromState(state) {
         y: item.y,
       };
       if (item.type === 'image' && item.url) {
-        const basename = path.basename(item.url);
-        const ext = path.extname(basename) || '';
         return {
           ...base,
-          asset: `assets/${item.id}${ext}`,
+          asset: `assets/${item.id}${ext(path.basename(item.url))}`,
         };
       }
       return {
@@ -122,9 +122,7 @@ app.get('/board/export', (req, res) => {
     const basename = path.basename(item.url);
     const srcPath = path.join(boardDir, basename);
     if (!fs.existsSync(srcPath)) return;
-    const ext = path.extname(basename) || '';
-    const assetName = `assets/${item.id}${ext}`;
-    archive.file(srcPath, { name: assetName });
+    archive.file(srcPath, { name: `assets/${item.id}${ext(basename)}` });
   });
 
   archive.finalize();
@@ -141,20 +139,14 @@ app.post('/upload', upload.single('file'), (req, res) => {
   const mimetype = req.file.mimetype || '';
   const filename = req.file.originalname || '';
 
-  let type = 'image';
+  const type = isImage(mimetype) ? 'image' : 'text';
   let textContent = null;
-  if (isImage(mimetype)) {
-    type = 'image';
-  } else if (isText(mimetype, filename)) {
-    type = 'text';
+  if (type === 'text' && isText(mimetype, filename)) {
     try {
       textContent = fs.readFileSync(req.file.path, 'utf8');
     } catch (_) {
       textContent = '';
     }
-  } else {
-    type = 'text';
-    textContent = null;
   }
 
   const item = { id, type, url: relativeUrl, textContent, x, y };
@@ -193,41 +185,25 @@ app.post('/board/import', importUpload.single('board'), (req, res) => {
     return res.status(400).json({ error: 'Unsupported or invalid board manifest' });
   }
 
-  try {
-    const existing = fs.readdirSync(boardDir);
-    existing.forEach((name) => {
-      if (name === '.gitkeep') return;
-      const p = path.join(boardDir, name);
-      try {
-        fs.unlinkSync(p);
-      } catch {
-        // ignore failures
-      }
-    });
-  } catch (err) {
-    console.error('Failed to clear board directory:', err);
-  }
+  clearBoardDir();
 
   const newState = [];
 
-  manifest.items.forEach((item) => {
+  for (const item of manifest.items) {
     const type = item.type;
     const x = Number(item.x) || 0;
     const y = Number(item.y) || 0;
 
     if (type === 'image' && item.asset) {
       const entry = zip.getEntry(item.asset);
-      if (!entry) {
-        return;
-      }
-      const ext = path.extname(item.asset) || '';
-      const filename = `${crypto.randomUUID()}${ext}`;
+      if (!entry) continue;
+      const filename = `${crypto.randomUUID()}${ext(item.asset)}`;
       const destPath = path.join(boardDir, filename);
       try {
         fs.writeFileSync(destPath, entry.getData());
       } catch (err) {
         console.error('Failed to write asset file:', err);
-        return;
+        continue;
       }
       newState.push({
         id: crypto.randomUUID(),
@@ -247,7 +223,7 @@ app.post('/board/import', importUpload.single('board'), (req, res) => {
         y,
       });
     }
-  });
+  }
 
   boardState = newState;
   io.emit('board_replaced', boardState);
@@ -262,7 +238,9 @@ app.post('/board/wipe', (_req, res) => {
   return res.json({ success: true });
 });
 
-const httpServer = http.createServer(app);
+const httpServer = app.listen(PORT, HOST, () => {
+  console.log(`Pizarra server at http://${HOST}:${PORT}`);
+});
 
 const io = new Server(httpServer);
 
@@ -278,8 +256,4 @@ io.on('connection', (socket) => {
       socket.broadcast.emit('item_moved', { id, x, y });
     }
   });
-});
-
-httpServer.listen(PORT, HOST, () => {
-  console.log(`Pizarra server at http://${HOST}:${PORT}`);
 });
