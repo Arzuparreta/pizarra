@@ -22,11 +22,32 @@
       flex-direction: column;
       gap: 8px;
     }
-    #sidebar h2 {
-      font-size: 14px;
-      font-weight: 600;
+    #sidebar-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       margin-bottom: 4px;
     }
+    #sidebar-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      flex: 1;
+    }
+    #add-board-btn {
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: 1px solid #bbb;
+      border-radius: 4px;
+      background: #f7f7f7;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #add-board-btn:hover { background: #eee; }
     #board-list {
       display: flex;
       flex-direction: column;
@@ -36,35 +57,48 @@
       overflow: auto;
     }
     .board-card {
-      padding: 8px 10px;
-      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 8px;
       border-radius: 4px;
       border: 1px solid #bbb;
       background: #f7f7f7;
-      cursor: pointer;
       font: 14px/1.3 sans-serif;
     }
     .board-card:hover { background: #eee; }
-    #new-board-row {
-      display: flex;
-      gap: 4px;
-    }
-    #new-board-name {
+    .board-card-name {
       flex: 1;
-      padding: 6px 8px;
-      border: 1px solid #bbb;
-      border-radius: 4px;
-      font: 14px/1.3 sans-serif;
-    }
-    #new-board-btn {
-      padding: 6px 10px;
-      border-radius: 4px;
-      border: 1px solid #bbb;
-      background: #f7f7f7;
+      min-width: 0;
+      text-align: left;
       cursor: pointer;
-      font: 14px/1.3 sans-serif;
+      border: none;
+      background: none;
+      font: inherit;
+      padding: 2px 0;
     }
-    #new-board-btn:hover { background: #eee; }
+    .board-card-name:focus { outline: none; }
+    .board-card-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .board-card-actions button {
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: none;
+      border-radius: 3px;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #555;
+    }
+    .board-card-actions button:hover { background: #ddd; color: #333; }
+    .board-card-actions button.delete:hover { background: #ffe0e0; color: #c00; }
     #main {
       flex: 1;
       position: relative;
@@ -173,12 +207,11 @@
 <body>
   <div id="app">
     <aside id="sidebar">
-      <h2>Boards</h2>
-      <div id="board-list"></div>
-      <div id="new-board-row">
-        <input type="text" id="new-board-name" placeholder="New board name" />
-        <button type="button" id="new-board-btn" class="btn">New</button>
+      <div id="sidebar-header">
+        <h2>Boards</h2>
+        <button type="button" id="add-board-btn" aria-label="Add board">+</button>
       </div>
+      <div id="board-list"></div>
     </aside>
     <main id="main">
       <div id="toolbar">

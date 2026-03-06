@@ -162,6 +162,47 @@ app.post('/api/board/:name/delete', (req, res) => {
   res.json({ success: true });
 });
 
+app.delete('/api/board/:name', (req, res) => {
+  const safe = sanitizeBoardName(req.params.name);
+  if (!safe) return res.status(400).json({ error: 'Invalid board name' });
+  const filePath = path.join(boardsDir, `${safe}.json`);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Board not found' });
+  delete boardStates[safe];
+  try {
+    fs.unlinkSync(filePath);
+  } catch (err) {
+    console.error('Delete board error:', err);
+    return res.status(500).json({ error: 'Failed to delete board' });
+  }
+  res.json({ success: true });
+});
+
+app.patch('/api/board/:name', (req, res) => {
+  const safe = sanitizeBoardName(req.params.name);
+  if (!safe) return res.status(400).json({ error: 'Invalid board name' });
+  const newName = sanitizeBoardName(req.body && req.body.name);
+  if (!newName) return res.status(400).json({ error: 'Invalid new name' });
+  if (newName === safe) return res.json({ success: true });
+  const oldPath = path.join(boardsDir, `${safe}.json`);
+  if (!fs.existsSync(oldPath)) return res.status(404).json({ error: 'Board not found' });
+  const newPath = path.join(boardsDir, `${newName}.json`);
+  if (fs.existsSync(newPath)) return res.status(400).json({ error: 'Name already in use' });
+  const state = getBoardState(safe);
+  if (!state) return res.status(404).json({ error: 'Board not found' });
+  boardStates[newName] = state;
+  delete boardStates[safe];
+  try {
+    fs.writeFileSync(newPath, JSON.stringify(state, null, 2), 'utf8');
+    fs.unlinkSync(oldPath);
+  } catch (err) {
+    console.error('Rename board error:', err);
+    delete boardStates[newName];
+    boardStates[safe] = state;
+    return res.status(500).json({ error: 'Failed to rename board' });
+  }
+  res.json({ success: true });
+});
+
 const httpServer = app.listen(PORT, HOST, () => {
   console.log(`Pizarra server at http://${HOST}:${PORT}`);
 });

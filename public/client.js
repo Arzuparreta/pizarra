@@ -4,9 +4,13 @@ const canvasEl = document.getElementById('canvas');
 const emptyHintEl = document.getElementById('empty-hint');
 const saveBtn = document.getElementById('save-board');
 const boardListEl = document.getElementById('board-list');
-const newBoardInput = document.getElementById('new-board-name');
-const newBoardBtn = document.getElementById('new-board-btn');
 const trashEl = document.getElementById('trash');
+
+function sanitizeBoardName(name) {
+  if (typeof name !== 'string') return '';
+  const safe = name.replace(/[^a-zA-Z0-9_-]/g, '');
+  return safe;
+}
 
 let currentBoardName = null;
 let boardState = [];
@@ -85,23 +89,118 @@ function makeDraggable(el) {
   });
 }
 
-function loadBoardList() {
-  fetch('/api/boards')
+function createBoardRow(name) {
+  const card = document.createElement('div');
+  card.className = 'board-card';
+  const nameEl = document.createElement('span');
+  nameEl.className = 'board-card-name';
+  nameEl.textContent = name;
+  nameEl.addEventListener('click', (e) => { e.stopPropagation(); openBoard(name); });
+  nameEl.addEventListener('dblclick', (e) => { e.stopPropagation(); startRename(card, name); });
+  const actions = document.createElement('div');
+  actions.className = 'board-card-actions';
+  const renameBtn = document.createElement('button');
+  renameBtn.type = 'button';
+  renameBtn.setAttribute('aria-label', 'Rename');
+  renameBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
+  renameBtn.addEventListener('click', (e) => { e.stopPropagation(); startRename(card, name); });
+  const deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.className = 'delete';
+  deleteBtn.setAttribute('aria-label', 'Delete');
+  deleteBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+  deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteBoard(name); });
+  actions.appendChild(renameBtn);
+  actions.appendChild(deleteBtn);
+  card.appendChild(nameEl);
+  card.appendChild(actions);
+  return card;
+}
+
+function startRename(card, name) {
+  const nameEl = card.querySelector('.board-card-name');
+  const text = nameEl.textContent;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'board-card-name';
+  input.value = text;
+  input.addEventListener('blur', commitRename);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { input.value = text; input.blur(); } });
+  card.replaceChild(input, nameEl);
+  input.focus();
+  input.select();
+  function commitRename() {
+    const newName = sanitizeBoardName(input.value);
+    card.removeChild(input);
+    const span = document.createElement('span');
+    span.className = 'board-card-name';
+    span.textContent = name;
+    span.addEventListener('click', (e) => { e.stopPropagation(); openBoard(name); });
+    span.addEventListener('dblclick', (e) => { e.stopPropagation(); startRename(card, name); });
+    card.insertBefore(span, card.querySelector('.board-card-actions'));
+    if (!newName || newName === name) return;
+    fetch(`/api/board/${encodeURIComponent(name)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName }),
+    })
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(() => {
+        if (currentBoardName === name) {
+          currentBoardName = newName;
+          socket.emit('join_board', { name: newName });
+        }
+        loadBoardList();
+      })
+      .catch(() => loadBoardList());
+  }
+}
+
+function deleteBoard(name) {
+  if (!confirm('Delete this board?')) return;
+  fetch(`/api/board/${encodeURIComponent(name)}`, { method: 'DELETE' })
+    .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+    .then(() => {
+      const wasCurrent = currentBoardName === name;
+      if (wasCurrent) {
+        currentBoardName = null;
+        boardState = [];
+        renderBoard([]);
+      }
+      return loadBoardList().then((data) => {
+        if (wasCurrent && data.names && data.names.length > 0) openBoard(data.names[0]);
+      });
+    })
+    .catch((err) => console.error('Delete board failed', err));
+}
+
+function createBoard() {
+  return fetch('/api/boards')
     .then((r) => r.json())
     .then((data) => {
       const names = data.names || [];
-      if (!boardListEl) return;
+      let id = 'New_Board';
+      let n = 2;
+      while (names.includes(id)) { id = `New_Board_${n}`; n++; }
+      return fetch(`/api/board/${encodeURIComponent(id)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: 1, items: [] }),
+      }).then((r) => { if (!r.ok) throw new Error(); return id; });
+    });
+}
+
+function loadBoardList() {
+  return fetch('/api/boards')
+    .then((r) => r.json())
+    .then((data) => {
+      const names = data.names || [];
+      if (!boardListEl) return data;
       boardListEl.innerHTML = '';
-      names.forEach((name) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'board-card';
-        btn.textContent = name;
-        btn.addEventListener('click', () => openBoard(name));
-        boardListEl.appendChild(btn);
-      });
+      names.forEach((name) => boardListEl.appendChild(createBoardRow(name)));
+      return data;
     })
-    .catch((err) => console.error('Failed to load boards', err));
+    .catch((err) => { console.error('Failed to load boards', err); return { names: [] }; });
 }
 
 function openBoard(name) {
@@ -193,13 +292,10 @@ if (wipeBtn) {
   });
 }
 
-if (newBoardBtn && newBoardInput) {
-  newBoardBtn.addEventListener('click', () => {
-    const name = (newBoardInput.value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '');
-    if (!name) return;
-    openBoard(name);
-    newBoardInput.value = '';
-    loadBoardList();
+const addBoardBtn = document.getElementById('add-board-btn');
+if (addBoardBtn) {
+  addBoardBtn.addEventListener('click', () => {
+    createBoard().then((id) => { openBoard(id); loadBoardList(); }).catch((err) => console.error('Create board failed', err));
   });
 }
 
@@ -224,4 +320,8 @@ if (dropZone) {
   });
 }
 
-loadBoardList();
+loadBoardList().then((data) => {
+  if (data.names && data.names.length === 0) {
+    createBoard().then((id) => { openBoard(id); return loadBoardList(); }).catch((err) => console.error('Create board failed', err));
+  }
+});
